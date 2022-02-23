@@ -12,7 +12,24 @@ def parse_int(n):
     except ValueError:
         return float("nan")
 
-
+def get_recommendation(risk_level):
+    """
+    Provides a recommendation based on risk level
+    """
+    if risk_level == "None":
+        initial_recommendation = "0% bonds (AGG), 100% equities (SPY)"
+    elif risk_level == "Very_Low":
+        initial_recommendation = "80% bonds (AGG), 20% equities (SPY)"
+    elif risk_level == "Low":
+        initial_recommendation = "60% bonds (AGG), 40% equities (SPY)"
+    elif risk_level == "Medium":
+        initial_recommendation = "40% bonds (AGG), 60% equities (SPY)"
+    elif risk_level == "High":
+        initial_recommendation = "20% bonds (AGG), 80% equities (SPY)"
+    elif risk_level == "Very_High":
+        initial_recommendation = "0% bonds (AGG), 100% equities (SPY)"
+    return initial_recommendation
+    
 def build_validation_result(is_valid, violated_slot, message_content):
     """
     Define a result message structured as Lex response.
@@ -25,7 +42,6 @@ def build_validation_result(is_valid, violated_slot, message_content):
         "violatedSlot": violated_slot,
         "message": {"contentType": "PlainText", "content": message_content},
     }
-
 
 ### Dialog Actions Helper Functions ###
 def get_slots(intent_request):
@@ -79,6 +95,38 @@ def close(session_attributes, fulfillment_state, message):
 
     return response
 
+def validate_data(age, investmentAmount, intent_request):
+    """
+    Validates the data provided by the user.
+    """
+    # Validate that the user is over 18 years old
+    if age is not None:
+        age_number = parse_int(
+            age
+        )  # Since parameters are strings it's important to cast values
+        if age_number < 0 or age_number >= 65:
+            return build_validation_result(
+                False,
+                "age",
+                "The maximum age to contract this service is 64, "
+                "can you provide an age between 0 and 64 please?",
+            )
+
+    # Validate the investment amount, it should be > 0
+    if investmentAmount is not None:
+        investment_amount = parse_int(
+            investmentAmount
+        )  # Since parameters are strings it's important to cast values
+        if investment_amount < 5000:
+            return build_validation_result(
+                False,
+                "investmentAmount",
+                "The minimum investment amount is $5000, "
+                "could you please provide a greater amount?",
+            )
+
+    # A True results is returned if age or amount are valid
+    return build_validation_result(True, None, None)
 
 ### Intents Handlers ###
 def recommend_portfolio(intent_request):
@@ -91,15 +139,21 @@ def recommend_portfolio(intent_request):
     investment_amount = get_slots(intent_request)["investmentAmount"]
     risk_level = get_slots(intent_request)["riskLevel"]
     source = intent_request["invocationSource"]
+    initial_recommendation = "This is my recommendation"
 
     if source == "DialogCodeHook":
         # Perform basic validation on the supplied input slots.
+        validation_result = validate_data(age, investment_amount, intent_request)
+        
+        # Gets all the slots
+        slots = get_slots(intent_request)
+        
         # Use the elicitSlot dialog action to re-prompt
         # for the first violation detected.
-
-        ### YOUR DATA VALIDATION CODE STARTS HERE ###
-
-        ### YOUR DATA VALIDATION CODE ENDS HERE ###
+        if not validation_result["isValid"]:
+            slots[validation_result["violatedSlot"]] = None  # Cleans invalid slot
+            return elicit_slot(intent_request["sessionAttributes"], intent_request["currentIntent"]["name"],
+                    slots, validation_result["violatedSlot"], validation_result["message"])
 
         # Fetch current session attibutes
         output_session_attributes = intent_request["sessionAttributes"]
@@ -107,10 +161,7 @@ def recommend_portfolio(intent_request):
         return delegate(output_session_attributes, get_slots(intent_request))
 
     # Get the initial investment recommendation
-
-    ### YOUR FINAL INVESTMENT RECOMMENDATION CODE STARTS HERE ###
-
-    ### YOUR FINAL INVESTMENT RECOMMENDATION CODE ENDS HERE ###
+    initial_recommendation = get_recommendation(risk_level)
 
     # Return a message with the initial recommendation based on the risk level.
     return close(
